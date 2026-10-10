@@ -1,0 +1,27 @@
+From the Frontend 
+ Error 1: Build Context Disconnect (/nginx.conf: not found)
+
+• The Symptom: Build failed early with a failed to compute cache key error stating that nginx.conf or your package.json paths could not be resolved.
+• The Root Cause: A fundamental misunderstanding of the Docker Build Context. The terminal command executed the build with the context set strictly to the frontend/ directory, but the Dockerfile was using nested paths (like COPY ./frontend/package.json ./), or trying to reach a configuration file (nginx.conf) that lived outside that specific folder. Docker cannot access files higher up or outside its defined context boundary.
+• The DevOps Fix:
+	1. We aligned the terminal's working directory directly with the build context.
+	2. We cleaned up the Dockerfile paths to use relative context pathing (COPY . . instead of referencing the folder name again).
+
+🚨 Error 2: Bloated Cache & Context Transfer Time (npm ci taking time)
+
+• The Symptom: The [builder 4/6] RUN npm ci step stalled and took a significant amount of time to execute.
+• The Root Cause: Your initial build context was uploading local host directories (like a heavy local node_modules folder or build artifacts) to the Docker daemon. Additionally, on the very first run of a cache-mounted container layer (--mount=type=cache), npm is forced to perform a complete cold-install of dependencies over the network.
+• The DevOps Fix:
+	1. We implemented a optimized .dockerignore file to explicitly block the host’s local node_modules and system caches from being transferred.
+	2. We leveraged --network=host to bypass virtual network bridge overhead inside Windows Docker Desktop.
+	3. The use of --mount=type=cache,target=/root/.npm ensured subsequent builds pull from a persistent local cache layer rather than querying the registry again.
+
+🚨 Error 3: Multi-Stage Artifact Mismatch (/app/dist: not found)
+
+• The Symptom: Step [runner 3/3] COPY --from=builder /app/dist crashed with a not found compilation exception at the absolute end of the build.
+• The Root Cause: A mismatch between the builder stage output and the runner stage input. The official guide you followed assumed a build tool ecosystem like Vite (which compiles static files into /app/dist). However, your specific project architecture utilizes Create React App (react-scripts), which compiles static files into /app/build. Nginx was trying to pull files from a directory that never existed in the builder container.
+• The DevOps Fix: We adjusted the multi-stage artifact transfer bridge. By changing the target directory line to match your compiler’s output (COPY --from=builder /app/build /usr/share/nginx/html), Nginx was successfully able to locate and package the compiled static assets.
+
+---
+
+BACKEND
