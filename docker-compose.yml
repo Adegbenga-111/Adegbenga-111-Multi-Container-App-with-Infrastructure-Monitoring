@@ -1,0 +1,168 @@
+# Docker Compose configuration
+services:
+
+  # -------------------------------------------------------
+  # DATABASE: MongoDB
+  # -------------------------------------------------------
+  mongodb:
+    image: mongo:7.0
+    container_name: task_manager_db
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: root
+      MONGO_INITDB_ROOT_PASSWORD: password
+    ports:
+      - "27017:27017"
+    volumes:
+      - mongo_data:/data/db
+    healthcheck:
+      test:
+        - CMD
+        - mongosh
+        - --quiet
+        - --username
+        - root
+        - --password
+        - password
+        - --authenticationDatabase
+        - admin
+        - --eval
+        - "db.adminCommand('ping').ok"
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 40s
+    restart: unless-stopped
+
+  # -------------------------------------------------------
+  # DATABASE WEB UI: Mongo Express
+  # -------------------------------------------------------
+  mongo-express:
+    image: mongo-express:1.0.2
+    container_name: task_manager_mongo_ui
+    environment:
+      ME_CONFIG_MONGODB_ADMINUSERNAME: root
+      ME_CONFIG_MONGODB_ADMINPASSWORD: password
+      ME_CONFIG_MONGODB_SERVER: mongodb
+      ME_CONFIG_MONGODB_PORT: 27017
+      ME_CONFIG_MONGODB_AUTH_DATABASE: admin
+      ME_CONFIG_BASICAUTH_ENABLED: "true"
+      ME_CONFIG_BASICAUTH_USERNAME: admin
+      ME_CONFIG_BASICAUTH_PASSWORD: change-this-password
+    ports:
+      - "8081:8081"
+    depends_on:
+      mongodb:
+        condition: service_healthy
+    restart: unless-stopped
+
+  # -------------------------------------------------------
+  # BACKEND: FastAPI
+  # -------------------------------------------------------
+  backend:
+    build:
+      context: ./Backend
+      dockerfile: Dockerfile
+    container_name: task_manager_api
+    ports:
+      - "8000:8000"
+    environment:
+      MONGO_URI: "mongodb://root:password@mongodb:27017/task_manager?authSource=admin"
+      DATABASE_NAME: task_manager
+    depends_on:
+      mongodb:
+        condition: service_healthy
+    command: uvicorn main:app --host 0.0.0.0 --port 8000
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - "import urllib.request; urllib.request.urlopen('http://localhost:8000/health', timeout=3)"
+      interval: 30s
+      timeout: 30s
+      retries: 10
+      start_period: 60s
+    restart: unless-stopped
+
+  # -------------------------------------------------------
+  # FRONTEND: React served by Nginx
+  # -------------------------------------------------------
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+      args:
+        REACT_APP_API_URL: "http://localhost:8000"
+    container_name: task_manager_frontend
+    ports:
+      - "3000:8080"
+    depends_on:
+      backend:
+        condition: service_healthy
+    restart: unless-stopped
+
+  # -------------------------------------------------------
+  # MONITORING: cAdvisor (container CPU / memory / network metrics)
+  # -------------------------------------------------------
+  cadvisor:
+    image: gcr.io/cadvisor/cadvisor:v0.49.1
+    container_name: task_manager_cadvisor
+    ports:
+      - "8082:8080"          # host 8082 -> cAdvisor UI (Prometheus uses cadvisor:8080 internally)
+    volumes:
+      - /:/rootfs:ro
+      - /var/run:/var/run:ro
+      - /sys:/sys:ro
+      - /var/lib/docker/:/var/lib/docker:ro
+      - /dev/disk/:/dev/disk:ro
+    privileged: true
+    devices:
+      - /dev/kmsg
+    restart: unless-stopped
+
+  # -------------------------------------------------------
+  # MONITORING: Prometheus (metrics storage and scraping)
+  # -------------------------------------------------------
+  prometheus:
+    image: prom/prometheus:v2.54.1
+    container_name: task_manager_prometheus
+    command:
+      - --config.file=/etc/prometheus/prometheus.yml
+      - --storage.tsdb.path=/prometheus
+      - --storage.tsdb.retention.time=15d
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus_data:/prometheus
+    depends_on:
+      - cadvisor
+    restart: unless-stopped
+
+  # -------------------------------------------------------
+  # MONITORING: Grafana (dashboards)
+  # -------------------------------------------------------
+  grafana:
+    image: grafana/grafana:11.2.0
+    container_name: task_manager_grafana
+    environment:
+      GF_SECURITY_ADMIN_USER: admin
+      GF_SECURITY_ADMIN_PASSWORD: change-this-password
+      GF_USERS_ALLOW_SIGN_UP: "false"
+    ports:
+      - "3001:3000"          # 3000 on the host is already used by the frontend
+    volumes:
+      - grafana_data:/var/lib/grafana
+      - ./grafana/provisioning:/etc/grafana/provisioning:ro
+    depends_on:
+      - prometheus
+    restart: unless-stopped
+
+
+# -------------------------------------------------------
+# PERSISTENT STORAGE
+# -------------------------------------------------------
+volumes:
+  mongo_data:
+  prometheus_data:
+  grafana_data:

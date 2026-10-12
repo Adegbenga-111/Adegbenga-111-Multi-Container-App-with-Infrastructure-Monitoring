@@ -1,0 +1,42 @@
+# -------------------------------------------------------------------------
+# GLOBAL CONFIGURATION
+# -------------------------------------------------------------------------
+# These settings apply universally to all monitoring jobs defined in this file.
+global:
+  # How often Prometheus will scrape (pull) metrics from your target containers.
+  # 15 seconds is the industry standard for development and testing.
+  scrape_interval: 15s
+
+  # How long Prometheus will wait for a target container to respond before timing out.
+  scrape_timeout: 10s
+
+  # How often Prometheus will evaluate its internal alerting rules (if configured).
+  evaluation_interval: 15s
+
+# -------------------------------------------------------------------------
+# SCRAPE CONFIGURATIONS
+# -------------------------------------------------------------------------
+# This section defines the specific endpoints (jobs) Prometheus will monitor.
+scrape_configs:
+
+  # --- JOB 1: Monitor Prometheus Itself ---
+  - job_name: 'prometheus'
+    # Metrics path defaults to '/metrics' if not explicitly defined.
+    metrics_path: /metrics
+    # Scheme defaults to 'http' if not explicitly defined.
+    scheme: http
+    # Static configurations allow you to manually specify the target addresses.
+    static_configs:
+      # Prometheus monitors its own internal performance metrics on port 9090.
+      # Since it is running inside itself, it can target 'localhost'.
+      - targets: ['localhost:9090']
+
+  # --- JOB 2: Monitor Container Infrastructure via cAdvisor ---
+  - job_name: 'cadvisor'
+    metrics_path: /metrics
+    scheme: http
+    static_configs:
+      # CRUCIAL: 'cadvisor' matches the service name defined in your docker-compose.yml file.
+      # Docker Compose automatically maps this hostname to cAdvisor's internal container IP.
+      # Port 8080 is the standard internal container port where cAdvisor exposes hardware data.
+      - targets: ['cadvisor:8080']
