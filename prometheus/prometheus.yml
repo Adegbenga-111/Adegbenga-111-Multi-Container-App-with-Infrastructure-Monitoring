@@ -33,10 +33,9 @@ scrape_configs:
 
   # --- JOB 2: Monitor Container Infrastructure via cAdvisor ---
   - job_name: 'cadvisor'
+    scrape_interval: 60s
+    scrape_timeout: 50s
     metrics_path: /metrics
     scheme: http
     static_configs:
-      # CRUCIAL: 'cadvisor' matches the service name defined in your docker-compose.yml file.
-      # Docker Compose automatically maps this hostname to cAdvisor's internal container IP.
-      # Port 8080 is the standard internal container port where cAdvisor exposes hardware data.
       - targets: ['cadvisor:8080']
