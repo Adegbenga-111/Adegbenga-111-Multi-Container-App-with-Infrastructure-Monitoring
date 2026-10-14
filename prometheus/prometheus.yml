@@ -39,3 +39,16 @@ scrape_configs:
     scheme: http
     static_configs:
       - targets: ['cadvisor:8080']
+
+  - job_name: 'backend'
+    scrape_interval: 30s
+    scrape_timeout: 20s
+    static_configs:
+      - targets: ['backend:8000']
+
+  # --- MongoDB metrics via the exporter ---
+  - job_name: 'mongodb'
+    scrape_interval: 30s
+    scrape_timeout: 20s       # longer timeout for a slow host
+    static_configs:
+      - targets: ['mongodb-exporter:9216']

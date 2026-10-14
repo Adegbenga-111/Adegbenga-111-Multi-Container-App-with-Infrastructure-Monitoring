@@ -1,5 +1,7 @@
 from contextlib import asynccontextmanager
 
+from prometheus_fastapi_instrumentator import Instrumentator
+
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 
@@ -38,6 +40,7 @@ app.add_middleware(
 # Register API routes.
 app.include_router(task_router)
 
+Instrumentator().instrument(app).expose(app)
 
 @app.get("/")
 def root():

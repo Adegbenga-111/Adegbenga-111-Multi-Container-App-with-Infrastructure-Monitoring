@@ -169,30 +169,24 @@ services:
   # MONITORING: cAdvisor (container CPU / memory / network metrics)
   # -------------------------------------------------------
   cadvisor:
-    # Google's container metrics exporter. Prometheus scrapes it.
     image: gcr.io/cadvisor/cadvisor:v0.49.1
     container_name: task_manager_cadvisor
     command:
-      - --housekeeping_interval=30s      # collect stats less often (default 1s)
-      - --docker_only=true               # only report Docker containers
-      - --disable_metrics=percpu,sched,tcp,udp,advtcp,hugetlb,referenced_memory,process
+        - --housekeeping_interval=30s        # collect stats less often (default 1s)
+        - --disable_metrics=percpu,sched,tcp,udp,advtcp,hugetlb,referenced_memory,process
+      # --docker_only removed so we can see every cgroup while debugging
     ports:
-      # host 8082 -> cAdvisor UI (Prometheus uses cadvisor:8080 internally)
       - "8082:8080"
-
-    # Read-only access to host paths so cAdvisor can inspect containers and system stats.
     volumes:
       - /:/rootfs:ro
       - /var/run:/var/run:ro
       - /sys:/sys:ro
+      - /sys/fs/cgroup:/sys/fs/cgroup:ro   # added: some hosts need this to read container cgroups
       - /var/lib/docker/:/var/lib/docker:ro
       - /dev/disk/:/dev/disk:ro
-
-    # Needed for full access to host metrics.
     privileged: true
     devices:
-      - /dev/kmsg   # kernel log device. Remove this block if it causes a startup error.
-
+      - /dev/kmsg
     restart: unless-stopped
 
   # -------------------------------------------------------
@@ -249,6 +243,34 @@ services:
 
     depends_on:
       - prometheus
+
+    restart: unless-stopped
+
+  # -------------------------------------------------------
+  # MONITORING: MongoDB exporter (turns MongoDB stats into Prometheus metrics)
+  # -------------------------------------------------------
+  mongodb-exporter:
+    # Percona's exporter. MongoDB has no /metrics endpoint of its own, so this container
+    # connects to the database and exposes the stats on port 9216 for Prometheus.
+    # Check that this tag exists on Docker Hub if the pull fails.
+    image: percona/mongodb_exporter:0.40
+    container_name: task_manager_mongo_exporter
+
+    command:
+      # Connection string. 'mongodb' is the service name, and the credentials must match
+      # MONGO_INITDB_ROOT_USERNAME / PASSWORD on the mongodb service.
+      - --mongodb.uri=mongodb://root:[REDACTED]@mongodb:27017/admin
+      # Collect all available metrics (database, collection, index and server stats).
+      # This is the heaviest option. Remove it on a low-memory host to keep only the basics.
+      - --collect-all
+
+    # Wait for MongoDB to be healthy before connecting.
+    depends_on:
+      mongodb:
+        condition: service_healthy
+
+    # No 'ports:' needed. Prometheus reaches it inside the Docker network at mongodb-exporter:9216.
+    # Add "9216:9216" only if you want to open http://localhost:9216/metrics in your browser.
 
     restart: unless-stopped
 
