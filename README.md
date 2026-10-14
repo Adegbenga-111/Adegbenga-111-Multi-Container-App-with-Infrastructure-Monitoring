@@ -72,7 +72,7 @@ The initial deployment uses Docker Compose. The next stage is to migrate the app
 
 The following diagram represents the current Docker Compose design.
 
-![Architecture Diagram]()
+![Architecture Diagram](https://github.com/Adegbenga-111/Adegbenga-111-Multi-Container-App-with-Infrastructure-Monitoring/blob/main/task_manager_architecture_colour.png)
 
 
 ### Architecture Overview
