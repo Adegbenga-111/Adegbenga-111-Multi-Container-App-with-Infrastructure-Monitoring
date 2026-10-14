@@ -72,6 +72,7 @@ The initial deployment uses Docker Compose. The next stage is to migrate the app
 
 The following diagram represents the current Docker Compose design.
 
+![Architecture Diagram]()
 
 
 ### Architecture Overview
